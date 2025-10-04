@@ -24,4 +24,4 @@ mutable2.upper()
 time.sleep(1)
 
 mutable2.set("Final text")
-mutable.set("Hello", "World! 3")
+mutable("Hello", "World! 3")
