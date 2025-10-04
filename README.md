@@ -20,8 +20,6 @@ This project is licensed under the MIT License.
 
 `mutable_print` is a replacement for Python's built-in `print()` function that stores printed content and allows you to modify it after it has been displayed. This is particularly useful for creating dynamic terminal UIs, progress bars, and loading animations.
 
-## Basic Usage
-
 ## API Reference
 
 ### Constructor

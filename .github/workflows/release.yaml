@@ -1,0 +1,183 @@
+name: Release and Publish to PyPI
+
+on:
+  release:
+    types: [published]
+
+env:
+  PACKAGE_NAME: "rich-style"
+  PYTHON_VERSION: "3.12"
+
+jobs:
+  validate-release:
+    name: Validate Release
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract.outputs.version }}
+      is_prerelease: ${{ steps.extract.outputs.is_prerelease }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: extract
+        run: |
+          TAG_NAME="${{ github.event.release.tag_name }}"
+          VERSION=$(echo "$TAG_NAME" | sed 's/^v//')
+          
+          if echo "$VERSION" | grep -qE "(alpha|beta|rc|dev|pre)"; then
+            IS_PRERELEASE="true"
+          else
+            IS_PRERELEASE="false"
+          fi
+          
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "is_prerelease=$IS_PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "Extracted version: $VERSION"
+          echo "Is prerelease: $IS_PRERELEASE"
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ steps.extract.outputs.version }}"
+          if ! echo "$VERSION" | grep -qE "^[0-9]+\.[0-9]+\.[0-9]+"; then
+            echo "Error: Version '$VERSION' does not follow semantic versioning"
+            exit 1
+          fi
+
+  check-pypi-version:
+    name: Check PyPI Version
+    runs-on: ubuntu-latest
+    needs: validate-release
+    steps:
+      - name: Check if version exists on PyPI
+        run: |
+          NEW_VERSION="${{ needs.validate-release.outputs.version }}"
+          echo "Checking if version $NEW_VERSION exists on PyPI..."
+          
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "https://pypi.org/pypi/${{ env.PACKAGE_NAME }}/$NEW_VERSION/json")
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "Error: Version $NEW_VERSION already exists on PyPI"
+            exit 1
+          elif [ "$HTTP_CODE" = "404" ]; then
+            echo "Version $NEW_VERSION does not exist on PyPI - good to proceed"
+          else
+            echo "Warning: Unable to check PyPI (HTTP $HTTP_CODE), proceeding anyway"
+          fi
+
+  build-package:
+    name: Build Package
+    runs-on: ubuntu-latest
+    needs: [validate-release, check-pypi-version]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Configure Poetry
+        run: |
+          poetry config virtualenvs.create true
+          poetry config virtualenvs.in-project true
+
+      - name: Set package version
+        run: |
+          poetry version "${{ needs.validate-release.outputs.version }}"
+          echo "Set package version to: $(poetry version --short)"
+
+      - name: Install dependencies
+        run: poetry install --only=main --no-interaction
+
+      - name: Build package
+        run: poetry build
+
+      - name: Verify build artifacts
+        run: |
+          echo "Built artifacts:"
+          ls -la dist/
+          echo "Checking wheel content:"
+          python -m zipfile -l dist/*.whl || true
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+          retention-days: 7
+
+  publish-to-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs: [validate-release, build-package]
+    environment:
+      name: pypi
+      url: https://pypi.org/p/${{ env.PACKAGE_NAME }}
+    permissions:
+      id-token: write
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: List artifacts
+        run: |
+          echo "Artifacts to publish:"
+          ls -la dist/
+
+      - name: Publish to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          print-hash: true
+          verbose: true
+          skip-existing: true
+
+  create-github-release-assets:
+    name: Upload Release Assets
+    runs-on: ubuntu-latest
+    needs: [validate-release, build-package]
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: python-package-distributions
+          path: dist/
+
+      - name: Upload release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for file in dist/*; do
+            if [[ "$file" != *.attestation ]]; then
+              echo "Uploading $file to release..."
+              gh release upload "${{ github.event.release.tag_name }}" "$file" --clobber
+            fi
+          done
+
+  notify-success:
+    name: Notify Success
+    runs-on: ubuntu-latest
+    needs: [validate-release, publish-to-pypi, create-github-release-assets]
+    if: success()
+    steps:
+      - name: Success notification
+        run: |
+          echo "🎉 Successfully published ${{ env.PACKAGE_NAME }} v${{ needs.validate-release.outputs.version }} to PyPI!"
+          echo "📦 Package URL: https://pypi.org/project/${{ env.PACKAGE_NAME }}/${{ needs.validate-release.outputs.version }}/"
+          echo "🏷️ GitHub Release: ${{ github.event.release.html_url }}"
