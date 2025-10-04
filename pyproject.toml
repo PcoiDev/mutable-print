@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "mutable-print"
-version = "1.0.1"
+version = "1.0.2"
 description = "Edit printed terminal text using ANSI escape codes."
 authors = ["PcoiDev"]
 readme = "README.md"
