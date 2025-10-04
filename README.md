@@ -1,6 +1,19 @@
-# Mutable Print Documentation
+# mutable-print
 
-A Python library that allows you to retroactively modify printed content in the terminal using ANSI escape sequences.
+Edit printed terminal text using ANSI escape codes.
+
+## Why Mutable Print?
+
+Traditional `print()` writes output that cannot be changed once printed.
+`mutable-print` fixes that you can **modify**, **replace**, **append**, **clear**, or **transform** text after it’s been printed.
+
+Perfect for:
+- **Dynamic CLI output**: progress bars, live status updates, etc.
+- **Retroactive edits**: fix or adjust lines even after more output follows.
+- **Readable terminals**: no messy reprints or repeated lines.
+- **Rich text operations**: prepend, append, regex replacement, upper/lower transforms.
+
+All achieved using ANSI escape sequences to move the cursor and redraw content.
 
 ## Installation
 
@@ -8,192 +21,215 @@ A Python library that allows you to retroactively modify printed content in the 
 pip install mutable-print
 ```
 
-## Credits
+## Usage (API Overview)
 
-Created and maintained by the mutable-print development team.
+### `mutable_print(*args: Any, sep: str = " ", end: str = "\n", file: Optional[TextIO] = None, flush: bool = False) -> mutable_print`
 
-## License
-
-This project is licensed under the MIT License.
-
-## Overview
-
-`mutable_print` is a replacement for Python's built-in `print()` function that stores printed content and allows you to modify it after it has been displayed. This is particularly useful for creating dynamic terminal UIs, progress bars, and loading animations.
-
-## API Reference
-
-### Constructor
+Creates a **mutable print object**, prints the initial content immediately, and returns a handle to modify it later.
 
 ```python
-mutable_print(
-    *args: Any,
-    sep: str = ' ',
-    end: str = '\n',
-    file: Optional[TextIO] = None,
-    flush: bool = False
-) -> mutable_print
+from mutable_print import mutable_print
+
+line = mutable_print("Loading...", flush=True)
+line("Done!")  # Update the same printed line
 ```
 
-Creates a new mutable print object with the same signature as the built-in `print()` function.
+#### Parameters
 
-**Parameters:**
-- `*args: Any` - Values to print
-- `sep: str` - String inserted between values (default: `' '`)
-- `end: str` - String appended after the last value (default: `'\n'`)
-- `file: Optional[TextIO]` - File object to write to (default: `sys.stdout`)
-- `flush: bool` - Whether to forcibly flush the stream (default: `False`)
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `*args` | `Any` | — | Values to print |
+| `sep` | `str` | `" "` | Separator between values |
+| `end` | `str` | `"\n"` | String appended at the end |
+| `file` | `TextIO` | `sys.stdout` | Output stream |
+| `flush` | `bool` | `False` | Whether to flush immediately |
 
-**Returns:** `mutable_print` instance
+#### Returns
 
-### Methods
+A `mutable_print` instance that can be updated or transformed.
 
-#### `__call__(*args: Any, sep: str = ' ', end: str = '\n') -> None`
+---
 
-Update the print content with new values.
+### `__call__(*args: Any, sep: str = " ", end: str = "\n") -> None`
+
+Update the content and **reprint** from this line onward.
 
 ```python
-mutable = mutable_print("Hello")
-mutable("World")
+line("Processing...", sep=" ", end="\n")
 ```
 
-**Parameters:**
-- `*args: Any` - New values to print
-- `sep: str` - New separator between values (default: `' '`)
-- `end: str` - New string appended after the last value (default: `'\n'`)
+#### Parameters
 
-#### `replace(old: str, new: str, count: int = -1) -> mutable_print`
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `*args` | `Any` | — | New values to print |
+| `sep` | `str` | `" "` | Separator |
+| `end` | `str` | `"\n"` | End string |
 
-Replace occurrences of a substring in the content.
+---
+
+### `replace(old: str, new: str, count: int = -1) -> mutable_print`
+
+Replace all (or a limited number of) occurrences of a substring in the current content.
 
 ```python
-mutable = mutable_print("Hello World")
-mutable.replace("World", "Python")
+line.replace("fail", "success", 1)
 ```
 
-**Parameters:**
-- `old: str` - Substring to replace
-- `new: str` - Replacement string
-- `count: int` - Maximum number of occurrences to replace (default: `-1` for all)
+#### Parameters
 
-**Returns:** `mutable_print` - Self for method chaining
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `old` | `str` | — | Substring to replace |
+| `new` | `str` | — | Replacement text |
+| `count` | `int` | `-1` | Max occurrences (`-1` for all) |
 
-#### `append(*text: str) -> mutable_print`
+---
 
-Append text to the end of the content.
+### `append(*text: str) -> mutable_print`
+
+Append text to the **end** of the content.
 
 ```python
-mutable = mutable_print("Hello")
-mutable.append("World", "!")
+line.append("...done")
 ```
 
-**Parameters:**
-- `*text: str` - Text strings to append
+#### Parameters
 
-**Returns:** `mutable_print` - Self for method chaining
+| Name | Type | Description |
+|------|------|-------------|
+| `*text` | `str` | Text strings to append |
 
-#### `prepend(*text: str) -> mutable_print`
+---
 
-Prepend text to the beginning of the content.
+### `prepend(*text: str) -> mutable_print`
+
+Prepend text to the **beginning** of the content.
 
 ```python
-mutable = mutable_print("World")
-mutable.prepend("Hello", " ")
+line.prepend("[INFO]")
 ```
 
-**Parameters:**
-- `*text: str` - Text strings to prepend
+#### Parameters
 
-**Returns:** `mutable_print` - Self for method chaining
+| Name | Type | Description |
+|------|------|-------------|
+| `*text` | `str` | Text strings to prepend |
 
-#### `clear() -> mutable_print`
+---
 
-Clear the content completely.
+### `clear() -> mutable_print`
+
+Clear the current content (sets it to an empty string).
 
 ```python
-mutable = mutable_print("Hello World")
-mutable.clear()
+line.clear()
 ```
 
-**Returns:** `mutable_print` - Self for method chaining
+---
 
-#### `set(*text: str) -> mutable_print`
+### `set(*text: str) -> mutable_print`
 
 Replace the entire content with new text.
 
 ```python
-mutable = mutable_print("Old text")
-mutable.set("New", "text")
+line.set("New content")
 ```
 
-**Parameters:**
-- `*text: str` - Text strings to set as new content
+#### Parameters
 
-**Returns:** `mutable_print` - Self for method chaining
+| Name | Type | Description |
+|------|------|-------------|
+| `*text` | `str` | Text strings to set as new content |
 
-#### `upper() -> mutable_print`
+---
 
-Convert all content to uppercase.
+### `upper() -> mutable_print`
+
+Convert the current content to **uppercase**.
 
 ```python
-mutable = mutable_print("hello")
-mutable.upper()
+line.upper()
 ```
 
-**Returns:** `mutable_print` - Self for method chaining
+---
 
-#### `lower() -> mutable_print`
+### `lower() -> mutable_print`
 
-Convert all content to lowercase.
+Convert the current content to **lowercase**.
 
 ```python
-mutable = mutable_print("HELLO")
-mutable.lower()
+line.lower()
 ```
 
-**Returns:** `mutable_print` - Self for method chaining
+---
 
-#### `regex_replace(pattern: str | re.Pattern[str], replacement: str, flags: int = 0) -> mutable_print`
+### `regex_replace(pattern: str | re.Pattern[str], replacement: str, flags: int = 0) -> mutable_print`
 
-Replace content using regular expressions.
+Perform a **regular expression** substitution on the content.
 
 ```python
-mutable = mutable_print("Hello123World456")
-mutable.regex_replace(r'\d+', '-')
+line.regex_replace(r"\d+", "42")
 ```
 
-**Parameters:**
-- `pattern: str | re.Pattern[str]` - Regular expression pattern to match (string or compiled pattern)
-- `replacement: str` - Replacement string (can include backreferences)
-- `flags: int` - Optional regex flags (e.g., `re.IGNORECASE`) (default: `0`)
+#### Parameters
 
-**Returns:** `mutable_print` - Self for method chaining
+| Name | Type | Default | Description |
+|------|------|---------|-------------|
+| `pattern` | `str` \| `re.Pattern` | — | Regex pattern |
+| `replacement` | `str` | — | Replacement string (supports backrefs) |
+| `flags` | `int` | `0` | Regex flags (e.g. `re.IGNORECASE`) |
 
-#### `get() -> str`
+---
 
-Get the current content as a string.
+### `get() -> str`
+
+Retrieve the current content.
 
 ```python
-mutable = mutable_print("Hello World")
-content = mutable.get()
+text = line.get()
 ```
 
-**Returns:** `str` - Current content string
+---
 
-## Method Chaining
+### `__str__() -> str`
 
-All modifier methods return `self`, allowing you to chain multiple operations:
+String representation of the current content. Called automatically by `str(line)`.
+
+---
+
+### `__repr__() -> str`
+
+Developer-friendly representation of the object:
 
 ```python
-mutable = mutable_print("hello world")
-mutable.upper().replace("WORLD", "PYTHON").append("!")
+mutable_print('Your content here')
 ```
 
-## How It Works
+# Examples
 
-`mutable_print` uses ANSI escape sequences to move the cursor up and clear lines, then reprints all content from the modified point forward. This creates the illusion of modifying previously printed content while maintaining compatibility with standard terminal output.
+1. [Basic Update](https://github.com/PcoiDev/mutable-print/blob/main/examples/basic-update.py)
+2. [Clean and Efficient Loading](https://github.com/PcoiDev/mutable-print/blob/main/examples/loading-dots.py)
+3. [Replace Text](https://github.com/PcoiDev/mutable-print/blob/main/examples/replace.py)
+4. [Append / Prepend](https://github.com/PcoiDev/mutable-print/blob/main/examples/append-preend.py)
+5. [Clearing and Retrieving Content](https://github.com/PcoiDev/mutable-print/blob/main/examples/clear.py)
+6. [Colored Text](https://github.com/PcoiDev/mutable-print/blob/main/examples/colors.py)
 
-## Limitations
+## How it works?
 
-- Works best in terminals that support ANSI escape sequences
-- May not work properly in non-interactive environments or certain IDEs
-- Performance may degrade with a large number of mutable print objects
+Internally, mutable-print:
+- Keeps a **global list** of all printed lines.
+- Calculates the cursor position relative to past prints.
+- Moves the cursor up using `\033[A` and clears lines with `\033[2K`.
+- Reprints from the updated index to maintain correct order.
+
+This enables **retroactive edits** even after printing additional lines.
+
+## Credits
+
+Developed with ❤️ by [PcoiDev](https://pcoi.dev)
+Uses only standard Python modules (`sys`, `re`, `typing`).
+
+## License
+
+This project is licensed under the [`MIT License`](https://github.com/PcoiDev/rich-style/blob/main/LICENSE).

@@ -9,7 +9,7 @@ TEXTS = {
     36: "Publishing results...",
     47: "Finishing..."
 }
-import mutable_print
+
 mutable = mutable_print(DOTS[0])
 current_text = ""
 
