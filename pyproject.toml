@@ -1,13 +1,13 @@
 [tool.poetry]
 name = "mutable-print"
-version = "1.0.2"
+version = "1.0.3"
 description = "Edit printed terminal text using ANSI escape codes."
 authors = ["PcoiDev"]
 readme = "README.md"
 license = "MIT"
 homepage = "https://github.com/PcoiDev/mutable-print"
 repository = "https://github.com/PcoiDev/mutable-print"
-keywords = ["python", "mutable", "custom", "print"]
+keywords = ["python", "mutable", "custom", "print", "modify", "update", "edit", "ansi", "terminal"]
 classifiers = [
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",

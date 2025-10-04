@@ -1,7 +1,7 @@
 from mutable_print import mutable_print
 import time
 
-mutable = mutable_print("Hello", "World! 2")
+mutable = mutable_print("Hello", "World! 2", end=" | ")
 mutable2 = mutable_print("Hello", "World!")
 time.sleep(1)
 
