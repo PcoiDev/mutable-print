@@ -5,8 +5,8 @@ on:
     types: [published]
 
 env:
-  PACKAGE_NAME: "rich-style"
-  PYTHON_VERSION: "3.12"
+  PACKAGE_NAME: "mutable-print"
+  PYTHON_VERSION: "3.8"
 
 jobs:
   validate-release:
