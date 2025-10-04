@@ -1,0 +1,33 @@
+[tool.poetry]
+name = "mutable-print"
+version = "1.0.0"
+description = "A Python library to create mutable prints."
+authors = ["PcoiDev"]
+readme = "README.md"
+license = "MIT"
+
+homepage = "https://github.com/PcoiDev/mutable-print"
+repository = "https://github.com/PcoiDev/mutable-print"
+
+keywords = [
+    "python", "mutable", "custom", "print"
+]
+
+classifiers = [
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Operating System :: Unix",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Microsoft :: Windows",
+]
+
+[tool.poetry.dependencies]
+python = "^3.8"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^6.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
