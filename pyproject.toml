@@ -1,8 +1,8 @@
 [tool.poetry]
 name = "mutable-print"
-version = "1.0.0"
-description = "A Python library that allows you to retroactively modify printed content in the terminal using ANSI escape sequences."
-authors = ["PcoiDev <your@email.com>"]
+version = "1.0.1"
+description = "Edit printed terminal text using ANSI escape codes."
+authors = ["PcoiDev"]
 readme = "README.md"
 license = "MIT"
 homepage = "https://github.com/PcoiDev/mutable-print"
@@ -24,9 +24,9 @@ python = "^3.8"
 pytest = "^6.0"
 
 [tool.poetry.urls]
-repository = "https://github.com/PcoiDev/mutable-print"
-documentation = "https://github.com/PcoiDev/mutable-print/wiki/Intro"
-"issues" = "https://github.com/PcoiDev/mutable-print/issues"
+Documentation = "https://github.com/PcoiDev/mutable-print/wiki/Intro"
+Issues = "https://github.com/PcoiDev/mutable-print/issues"
+Repository = "https://github.com/PcoiDev/mutable-print"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
