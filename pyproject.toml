@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "mutable-print"
 version = "1.0.0"
-description = "A Python library to create mutable prints."
+description = "A Python library that allows you to retroactively modify printed content in the terminal using ANSI escape sequences."
 authors = ["PcoiDev"]
 readme = "README.md"
 license = "MIT"
