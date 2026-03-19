@@ -1,292 +1,295 @@
-from typing import Any, Optional, TextIO, List
-import sys
+import os
 import re
-from .core.combine_text import combine_text
+import sys
+from typing import Any, Callable, List, Optional, Pattern, TextIO, Tuple, Union
+
+if os.name == "nt":
+    os.system("")
+
+Record = Tuple[str, Any]
+
 
 class mutable_print:
-    __slots__ = ('args', 'sep', 'end', 'file', 'flush', 'content', 'index', 
-                 '_cached_output', '_line_start', '_col_start')
-    
-    _global_prints: List['mutable_print'] = []
+    __slots__ = (
+        "sep",
+        "end",
+        "file",
+        "flush",
+        "content",
+        "_managed",
+        "_record_index",
+        "_cached_output",
+    )
+
+    _records: List[Record] = []
     _original_stdout: TextIO = sys.stdout
-    _original_write: Optional[Any] = None
-    _lines_used: int = 0
-    _buffer: List[List[str]] = [[]]
-    _cursor_line: int = 0
-    _cursor_col: int = 0
-    
+    _original_write: Optional[Callable[[str], int]] = None
+    _intercept_installed: bool = False
+    _capture_enabled: bool = True
+
+    class _InterceptedStdout:
+        def write(self, text: str) -> int:
+            cls = mutable_print
+            if text and cls._capture_enabled:
+                cls._capture_static_write(text)
+
+            if cls._original_write is None:
+                return 0
+
+            return cls._original_write(text)
+
+        def flush(self) -> None:
+            mutable_print._original_stdout.flush()
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(mutable_print._original_stdout, name)
+
     def __init__(
         self,
         *args: Any,
-        sep: str = ' ',
-        end: str = '\n',
+        sep: str = " ",
+        end: str = "\n",
         file: Optional[TextIO] = None,
-        flush: bool = False
+        flush: bool = False,
     ) -> None:
-        if mutable_print._original_write is None:
-            mutable_print._original_write = sys.stdout.write
-            mutable_print._setup_intercept()
-        
-        self.args = args
         self.sep = sep
         self.end = end
-        self.file = file or mutable_print._original_stdout
         self.flush = flush
-        self.content = sep.join(map(str, args))
-        self.index = len(mutable_print._global_prints)
-        self._cached_output = ""
-        self._line_start = mutable_print._cursor_line
-        self._col_start = mutable_print._cursor_col
-        
-        mutable_print._global_prints.append(self)
-        self._print_and_update_buffer()
-    
-    @classmethod
-    def _setup_intercept(cls):
-        """Setup stdout interception for regular prints"""
-        class InterceptedStdout:
-            def write(self, text):
-                # For regular prints, update buffer tracking
-                if not text or text.startswith('\033['):
-                    return cls._original_write(text)
-                
-                for char in text:
-                    if char == '\n':
-                        cls._cursor_line += 1
-                        cls._cursor_col = 0
-                        if cls._cursor_line >= len(cls._buffer):
-                            cls._buffer.append([])
-                    elif char == '\r':
-                        cls._cursor_col = 0
-                    else:
-                        # Ensure buffer line exists
-                        while cls._cursor_line >= len(cls._buffer):
-                            cls._buffer.append([])
-                        
-                        line = cls._buffer[cls._cursor_line]
-                        while cls._cursor_col >= len(line):
-                            line.append(' ')
-                        
-                        if cls._cursor_col < len(line):
-                            line[cls._cursor_col] = char
-                        else:
-                            line.append(char)
-                        cls._cursor_col += 1
-                
-                cls._lines_used = max(cls._lines_used, cls._cursor_line + 1)
-                return cls._original_write(text)
-            
-            def flush(self):
-                return cls._original_stdout.flush()
-            
-            def __getattr__(self, name):
-                return getattr(cls._original_stdout, name)
-        
-        sys.stdout = InterceptedStdout()
-    
-    def _print_and_update_buffer(self) -> None:
-        """Print content and update buffer tracking"""
-        output = self.content + self.end
-        self._cached_output = output
-        
-        # Store position
-        start_line = mutable_print._cursor_line
-        start_col = mutable_print._cursor_col
-        self._line_start = start_line
-        self._col_start = start_col
-        
-        # Update buffer with our content
-        for char in output:
-            if char == '\n':
-                mutable_print._cursor_line += 1
-                mutable_print._cursor_col = 0
-                if mutable_print._cursor_line >= len(mutable_print._buffer):
-                    mutable_print._buffer.append([])
-            else:
-                while mutable_print._cursor_line >= len(mutable_print._buffer):
-                    mutable_print._buffer.append([])
-                
-                line = mutable_print._buffer[mutable_print._cursor_line]
-                while mutable_print._cursor_col >= len(line):
-                    line.append(' ')
-                
-                if mutable_print._cursor_col < len(line):
-                    line[mutable_print._cursor_col] = char
-                else:
-                    line.append(char)
-                mutable_print._cursor_col += 1
-        
-        mutable_print._lines_used = max(mutable_print._lines_used, mutable_print._cursor_line + 1)
-        
-        # Write the output
-        mutable_print._original_write(output)
+        self.content = sep.join(str(arg) for arg in args)
+        self._managed = False
+        self._record_index = -1
+        self._cached_output = self._output()
+
+        target_stream = file if file is not None else sys.stdout
+
+        if self._is_stdout_stream(target_stream):
+            self._ensure_stdout_intercept()
+            self.file = sys.stdout
+            self._managed = True
+            self._record_index = len(self._records)
+            self._records.append(("mutable", self))
+            self._write_stdout(self._cached_output, flush=self.flush)
+            return
+
+        self.file = target_stream
+        self.file.write(self._cached_output)
         if self.flush:
-            mutable_print._original_stdout.flush()
-    
+            self.file.flush()
+
     @classmethod
-    def _quick_update(cls, obj: 'mutable_print') -> None:
-        """Optimized update for a single mutable_print object"""
-        new_output = obj.content + obj.end
-        old_output = obj._cached_output
-        
-        # Save cursor position
-        saved_line = cls._cursor_line
-        saved_col = cls._cursor_col
-        
-        # Calculate movement needed
-        lines_up = saved_line - obj._line_start
-        
-        # Build single escape sequence for movement
-        move_seq = ""
-        if lines_up > 0:
-            move_seq = f"\033[{lines_up}A"
-        elif lines_up < 0:
-            move_seq = f"\033[{-lines_up}B"
-        
-        # Move to column
-        if obj._col_start == 0:
-            move_seq += "\r"
+    def _is_stdout_stream(cls, stream: TextIO) -> bool:
+        if cls._intercept_installed:
+            return stream is sys.stdout or stream is cls._original_stdout
+        return stream is sys.stdout
+
+    @classmethod
+    def _ensure_stdout_intercept(cls) -> None:
+        if cls._intercept_installed:
+            return
+
+        cls._original_stdout = sys.stdout
+        cls._original_write = cls._original_stdout.write
+        sys.stdout = cls._InterceptedStdout()
+        cls._intercept_installed = True
+
+    @classmethod
+    def _capture_static_write(cls, text: str) -> None:
+        if not text:
+            return
+
+        if cls._records and cls._records[-1][0] == "static":
+            cls._records[-1] = ("static", cls._records[-1][1] + text)
+            return
+
+        cls._records.append(("static", text))
+
+    @classmethod
+    def _write_stdout(cls, text: str, flush: bool = False) -> None:
+        if cls._original_write is None:
+            cls._original_stdout = sys.stdout
+            cls._original_write = cls._original_stdout.write
+
+        previous_capture_state = cls._capture_enabled
+        cls._capture_enabled = False
+
+        try:
+            cls._original_write(text)
+        finally:
+            cls._capture_enabled = previous_capture_state
+
+        if flush:
+            cls._original_stdout.flush()
+
+    def _output(self) -> str:
+        return self.content + self.end
+
+    @classmethod
+    def _record_output(cls, record: Record, use_cached: bool) -> str:
+        kind, payload = record
+
+        if kind == "static":
+            return payload
+
+        if use_cached:
+            return payload._cached_output
+
+        return payload._output()
+
+    @classmethod
+    def _render_from(cls, index: int, use_cached: bool) -> str:
+        return "".join(cls._record_output(record, use_cached) for record in cls._records[index:])
+
+    @classmethod
+    def _line_start_index(cls, index: int) -> int:
+        start_index = index
+
+        while start_index > 0:
+            previous_output = cls._record_output(cls._records[start_index - 1], use_cached=True)
+            if previous_output.endswith("\n"):
+                break
+            start_index -= 1
+
+        return start_index
+
+    @staticmethod
+    def _line_count(text: str) -> int:
+        if not text:
+            return 0
+
+        new_line_count = text.count("\n")
+        if text.endswith("\n"):
+            return new_line_count
+
+        return new_line_count + 1
+
+    @staticmethod
+    def _build_clear_sequence(line_count: int) -> str:
+        if line_count <= 0:
+            return ""
+
+        sequence_parts: List[str] = []
+
+        for line_number in range(line_count):
+            sequence_parts.append("\033[2K")
+            if line_number < line_count - 1:
+                sequence_parts.append("\n")
+
+        if line_count > 1:
+            sequence_parts.append("\033[{0}A\r".format(line_count - 1))
         else:
-            move_seq += f"\r\033[{obj._col_start}C"
-        
-        # Clear old content and write new
-        old_len = len(old_output.replace('\n', ''))
-        new_len = len(new_output.replace('\n', ''))
-        
-        if old_len > new_len:
-            # Write new content then clear extra characters
-            write_seq = move_seq + new_output.rstrip('\n')
-            clear_needed = old_len - new_len
-            write_seq += ' ' * clear_needed
-            # Move back to where cursor should be after new content
-            write_seq += '\b' * clear_needed
-            if new_output.endswith('\n'):
-                write_seq += '\n'
-        else:
-            write_seq = move_seq + new_output
-        
-        # Return cursor in same operation
-        if saved_line > obj._line_start:
-            write_seq += f"\033[{saved_line - obj._line_start}B"
-        
-        if saved_col > 0:
-            write_seq += f"\r\033[{saved_col}C"
-        else:
-            write_seq += "\r"
-        
-        # Write everything in one go
-        cls._original_write(write_seq)
-        cls._original_stdout.flush()
-        
-        # Update cached output
-        obj._cached_output = new_output
-        
-        # Update buffer - clear old content first
-        temp_line = obj._line_start
-        temp_col = obj._col_start
-        
-        # Clear old content in buffer
-        for char in old_output:
-            if char == '\n':
-                # Clear rest of line
-                if temp_line < len(cls._buffer):
-                    line = cls._buffer[temp_line]
-                    while temp_col < len(line):
-                        line[temp_col] = ' '
-                        temp_col += 1
-                temp_line += 1
-                temp_col = 0
+            sequence_parts.append("\r")
+
+        return "".join(sequence_parts)
+
+    @classmethod
+    def _sync_cached_outputs(cls, start_index: int) -> None:
+        for kind, payload in cls._records[start_index:]:
+            if kind == "mutable":
+                payload._cached_output = payload._output()
+
+    @classmethod
+    def _reprint_from(cls, index: int, flush: bool = True) -> None:
+        if index < 0 or index >= len(cls._records):
+            return
+
+        start_index = cls._line_start_index(index)
+        old_suffix = cls._render_from(start_index, use_cached=True)
+        new_suffix = cls._render_from(start_index, use_cached=False)
+
+        if old_suffix:
+            lines_up = old_suffix.count("\n")
+
+            if lines_up > 0:
+                cls._write_stdout("\033[{0}A\r".format(lines_up))
             else:
-                if temp_line < len(cls._buffer) and temp_col < len(cls._buffer[temp_line]):
-                    cls._buffer[temp_line][temp_col] = ' '
-                temp_col += 1
-        
-        # Write new content in buffer
-        temp_line = obj._line_start
-        temp_col = obj._col_start
-        
-        for char in new_output:
-            if char == '\n':
-                temp_line += 1
-                temp_col = 0
-                if temp_line >= len(cls._buffer):
-                    cls._buffer.append([])
-            else:
-                while temp_line >= len(cls._buffer):
-                    cls._buffer.append([])
-                
-                line = cls._buffer[temp_line]
-                while temp_col >= len(line):
-                    line.append(' ')
-                line[temp_col] = char
-                temp_col += 1
-    
+                cls._write_stdout("\r")
+
+            cls._write_stdout(cls._build_clear_sequence(cls._line_count(old_suffix)))
+
+        cls._write_stdout(new_suffix, flush=flush)
+        cls._sync_cached_outputs(start_index)
+
     def __call__(self, *args: Any, sep: Optional[str] = None, end: Optional[str] = None) -> None:
-        """Update content with new values"""
-        self.args = args
         if sep is not None:
             self.sep = sep
+
         if end is not None:
             self.end = end
-        self.content = self.sep.join(map(str, args))
-        mutable_print._quick_update(self)
-    
+
+        self.content = self.sep.join(str(arg) for arg in args)
+        self._update()
+
     def _update(self) -> None:
-        """Internal update method"""
-        mutable_print._quick_update(self)
-    
-    def replace(self, old: str, new: str, count: int = -1) -> 'mutable_print':
+        if self._managed:
+            self._reprint_from(self._record_index, flush=True)
+            return
+
+        output = self._output()
+        isatty = getattr(self.file, "isatty", None)
+
+        if callable(isatty) and isatty():
+            self.file.write("\r\033[2K" + output)
+        else:
+            self.file.write(output)
+
+        self.file.flush()
+        self._cached_output = output
+
+    def replace(self, old: str, new: str, count: int = -1) -> "mutable_print":
         self.content = self.content.replace(old, new, count)
         self._update()
         return self
-    
-    def append(self, *text: str) -> 'mutable_print':
-        self.content += combine_text(*text, separator=" ")
+
+    def append(self, *text: str) -> "mutable_print":
+        self.content += " ".join(str(part) for part in text)
         self._update()
         return self
-    
-    def prepend(self, *text: str) -> 'mutable_print':
-        self.content = combine_text(*text, separator=" ") + self.content
+
+    def prepend(self, *text: str) -> "mutable_print":
+        self.content = " ".join(str(part) for part in text) + self.content
         self._update()
         return self
-    
-    def clear(self) -> 'mutable_print':
+
+    def clear(self) -> "mutable_print":
         self.content = ""
         self._update()
         return self
-    
-    def set(self, *text: str) -> 'mutable_print':
-        self.content = combine_text(*text, separator=" ")
+
+    def set(self, *text: str) -> "mutable_print":
+        self.content = " ".join(str(part) for part in text)
         self._update()
         return self
-    
-    def upper(self) -> 'mutable_print':
+
+    def upper(self) -> "mutable_print":
         self.content = self.content.upper()
         self._update()
         return self
-    
-    def lower(self) -> 'mutable_print':
+
+    def lower(self) -> "mutable_print":
         self.content = self.content.lower()
         self._update()
         return self
-    
+
     def regex_replace(
         self,
-        pattern: str | re.Pattern[str],
+        pattern: Union[str, Pattern[str]],
         replacement: str,
-        flags: int = 0
-    ) -> 'mutable_print':
+        flags: int = 0,
+    ) -> "mutable_print":
         if isinstance(pattern, str):
-            pattern = re.compile(pattern, flags)
-        self.content = pattern.sub(replacement, self.content)
+            compiled_pattern = re.compile(pattern, flags)
+        else:
+            compiled_pattern = pattern
+
+        self.content = compiled_pattern.sub(replacement, self.content)
         self._update()
         return self
-    
+
     def get(self) -> str:
         return self.content
-    
+
     def __str__(self) -> str:
         return self.content
-    
+
     def __repr__(self) -> str:
-        return f"mutable_print({self.content!r})"
+        return "mutable_print({0!r})".format(self.content)

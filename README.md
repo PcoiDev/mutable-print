@@ -1,126 +1,123 @@
 # mutable-print
 
-Edit printed terminal text using ANSI escape codes.
+**Edit printed terminal text after it's already been printed.**
 
-## Why Mutable Print?
+[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/mutable-print)](https://pypi.org/project/mutable-print/)
 
-Traditional `print()` writes output that cannot be changed once printed.
-`mutable-print` fixes that you can **modify**, **replace**, **append**, **clear**, or **transform** text after it’s been printed.
+---
 
-Perfect for:
-- **Dynamic CLI output**: progress bars, live status updates, etc.
-- **Retroactive edits**: fix or adjust lines even after more output follows.
-- **Readable terminals**: no messy reprints or repeated lines.
-- **Rich text operations**: prepend, append, regex replacement, upper/lower transforms.
+## What is mutable-print?
 
-All achieved using ANSI escape sequences to move the cursor and redraw content.
+Once you call `print()`, that line is done — you can't touch it. If you want to show a progress bar, a live status, or just update a value in place, you're stuck reprinting the same line over and over, which looks messy.
 
-## Installation
+`mutable-print` fixes that. It gives you a handle to any line you've printed, so you can update, replace, append, clear, or transform it at any point — even after printing more lines below it.
 
 ```bash
 pip install mutable-print
 ```
 
-## Usage (API Overview)
+---
 
-### `mutable_print(*args: Any, sep: str = " ", end: str = "\n", file: Optional[TextIO] = None, flush: bool = False) -> mutable_print`
-
-Creates a **mutable print object**, prints the initial content immediately, and returns a handle to modify it later.
+## Your first mutable line
 
 ```python
 from mutable_print import mutable_print
 
 line = mutable_print("Loading...", flush=True)
-line("Done!")  # Update the same printed line
+# ... do some work ...
+line("Done!")
 ```
 
-#### Parameters
-
-| Name | Type | Default | Description |
-|------|------|---------|-------------|
-| `*args` | `Any` | — | Values to print |
-| `sep` | `str` | `" "` | Separator between values |
-| `end` | `str` | `"\n"` | String appended at the end |
-| `file` | `TextIO` | `sys.stdout` | Output stream |
-| `flush` | `bool` | `False` | Whether to flush immediately |
-
-#### Returns
-
-A `mutable_print` instance that can be updated or transformed.
+`mutable_print` works exactly like Python's built-in `print`, except it returns an object you can use to edit the line later. Calling that object like a function replaces the content.
 
 ---
 
-### `__call__(*args: Any, sep: str = " ", end: str = "\n") -> None`
+## Updating content
 
-Update the content and **reprint** from this line onward.
+### Calling the object directly
+
+The simplest way to update a line — just call it like a function with new content.
 
 ```python
-line("Processing...", sep=" ", end="\n")
+line("Processing 3/10...")
+line("Processing 7/10...")
+line("All done!")
 ```
 
-#### Parameters
-
-| Name | Type | Default | Description |
-|------|------|---------|-------------|
-| `*args` | `Any` | — | New values to print |
-| `sep` | `str` | `" "` | Separator |
-| `end` | `str` | `"\n"` | End string |
+You can also change `sep` and `end` at the same time. If you leave them out, the current values are kept.
 
 ---
 
-### `replace(old: str, new: str, count: int = -1) -> mutable_print`
+### `line.set(*text)`
 
-Replace all (or a limited number of) occurrences of a substring in the current content.
+Replace the entire content with something new. Equivalent to calling the object directly, but chainable.
 
 ```python
-line.replace("fail", "success", 1)
+line.set("New content here")
 ```
-
-#### Parameters
-
-| Name | Type | Default | Description |
-|------|------|---------|-------------|
-| `old` | `str` | — | Substring to replace |
-| `new` | `str` | — | Replacement text |
-| `count` | `int` | `-1` | Max occurrences (`-1` for all) |
 
 ---
 
-### `append(*text: str) -> mutable_print`
+### `line.replace(old, new, count=-1)`
 
-Append text to the **end** of the content.
+Replace occurrences of a substring inside the current content. By default replaces all of them — pass `count` to limit it.
 
 ```python
-line.append("...done")
+line.replace("FAILED", "OK")
+line.replace("x", "✓", 1)  # only the first one
 ```
-
-#### Parameters
-
-| Name | Type | Description |
-|------|------|-------------|
-| `*text` | `str` | Text strings to append |
 
 ---
 
-### `prepend(*text: str) -> mutable_print`
+### `line.regex_replace(pattern, replacement, flags=0)`
 
-Prepend text to the **beginning** of the content.
+Same idea as `replace`, but with a regex pattern. Supports backreferences and all standard `re` flags.
 
 ```python
-line.prepend("[INFO]")
+line.regex_replace(r"\d+", "??")
+line.regex_replace(r"(\w+) error", r"\1 warning", flags=re.IGNORECASE)
 ```
-
-#### Parameters
-
-| Name | Type | Description |
-|------|------|-------------|
-| `*text` | `str` | Text strings to prepend |
 
 ---
 
-### `clear() -> mutable_print`
+## Adding content
 
-Clear the current content (sets it to an empty string).
+### `line.append(*text)`
+
+Adds text to the end of the current content.
+
+```python
+line.append(" ✓")
+```
+
+---
+
+### `line.prepend(*text)`
+
+Adds text to the beginning of the current content.
+
+```python
+line.prepend("[INFO] ")
+```
+
+---
+
+## Other operations
+
+### `line.upper()` / `line.lower()`
+
+Converts the current content to uppercase or lowercase.
+
+```python
+line.upper()  # "hello world" → "HELLO WORLD"
+```
+
+---
+
+### `line.clear()`
+
+Wipes the content entirely — sets it to an empty string.
 
 ```python
 line.clear()
@@ -128,108 +125,63 @@ line.clear()
 
 ---
 
-### `set(*text: str) -> mutable_print`
+### `line.get()`
 
-Replace the entire content with new text.
-
-```python
-line.set("New content")
-```
-
-#### Parameters
-
-| Name | Type | Description |
-|------|------|-------------|
-| `*text` | `str` | Text strings to set as new content |
-
----
-
-### `upper() -> mutable_print`
-
-Convert the current content to **uppercase**.
+Returns the current content as a string, without printing anything.
 
 ```python
-line.upper()
+status = line.get()
 ```
 
 ---
 
-### `lower() -> mutable_print`
+## Chaining
 
-Convert the current content to **lowercase**.
+All methods except `get()` return the `mutable_print` instance, so you can chain operations together.
 
 ```python
-line.lower()
+line.prepend("[WARN] ").replace("timeout", "slow response").upper()
 ```
 
 ---
 
-### `regex_replace(pattern: str | re.Pattern[str], replacement: str, flags: int = 0) -> mutable_print`
+## Full API reference
 
-Perform a **regular expression** substitution on the content.
+### `mutable_print(*args, sep=" ", end="\n", file=None, flush=False)`
 
-```python
-line.regex_replace(r"\d+", "42")
-```
+Creates the mutable print object and immediately prints the initial content.
 
-#### Parameters
-
-| Name | Type | Default | Description |
-|------|------|---------|-------------|
-| `pattern` | `str` \| `re.Pattern` | — | Regex pattern |
-| `replacement` | `str` | — | Replacement string (supports backrefs) |
-| `flags` | `int` | `0` | Regex flags (e.g. `re.IGNORECASE`) |
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `*args` | `Any` | — | Values to print |
+| `sep` | `str` | `" "` | Separator between values |
+| `end` | `str` | `"\n"` | String appended at the end |
+| `file` | `TextIO` | `sys.stdout` | Output stream |
+| `flush` | `bool` | `False` | Whether to flush immediately |
 
 ---
 
-### `get() -> str`
+### Method summary
 
-Retrieve the current content.
-
-```python
-text = line.get()
-```
+| Method | What it does |
+|---|---|
+| `line(...)` | Replace content and reprint |
+| `line.set(*text)` | Replace content (chainable) |
+| `line.replace(old, new, count=-1)` | Substring replacement |
+| `line.regex_replace(pattern, repl, flags=0)` | Regex replacement |
+| `line.append(*text)` | Add to the end |
+| `line.prepend(*text)` | Add to the beginning |
+| `line.upper()` | Uppercase |
+| `line.lower()` | Lowercase |
+| `line.clear()` | Wipe content |
+| `line.get()` | Return content as string |
 
 ---
 
-### `__str__() -> str`
+## How it works
 
-String representation of the current content. Called automatically by `str(line)`.
+Internally, `mutable-print` keeps a global list of everything that's been printed. When you update a line, it calculates how many lines up that content lives, moves the cursor back using ANSI escape codes (`\033[A`), clears from there, and reprints everything from that point downward.
 
----
+This is what makes retroactive edits work correctly — even if you've printed ten more lines after the one you're editing, the update lands in the right place and the rest of the output follows cleanly.
 
-### `__repr__() -> str`
-
-Developer-friendly representation of the object:
-
-```python
-mutable_print('Your content here')
-```
-
-# Examples
-
-1. [Basic Update](https://github.com/PcoiDev/mutable-print/blob/main/examples/basic-update.py)
-2. [Clean and Efficient Loading](https://github.com/PcoiDev/mutable-print/blob/main/examples/loading-dots.py)
-3. [Replace Text](https://github.com/PcoiDev/mutable-print/blob/main/examples/replace.py)
-4. [Append / Prepend](https://github.com/PcoiDev/mutable-print/blob/main/examples/append-preend.py)
-5. [Clearing and Retrieving Content](https://github.com/PcoiDev/mutable-print/blob/main/examples/clear.py)
-6. [Colored Text](https://github.com/PcoiDev/mutable-print/blob/main/examples/colors.py)
-
-## How it works?
-
-Internally, mutable-print:
-- Keeps a **global list** of all printed lines.
-- Calculates the cursor position relative to past prints.
-- Moves the cursor up using `\033[A` and clears lines with `\033[2K`.
-- Reprints from the updated index to maintain correct order.
-
-This enables **retroactive edits** even after printing additional lines.
-
-## Credits
-
-Developed with ❤️ by [PcoiDev](https://pcoi.dev)
-Uses only standard Python modules (`sys`, `re`, `typing`).
-
-## License
-
-This project is licensed under the [`MIT License`](https://github.com/PcoiDev/rich-style/blob/main/LICENSE).
+Uses only standard Python modules: `sys`, `re`, and `typing`.
